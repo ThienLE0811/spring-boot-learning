@@ -6,6 +6,7 @@ import com.example.crudapi.dto.ProductRequest;
 import com.example.crudapi.dto.ProductResponse;
 import com.example.crudapi.entity.Product;
 import com.example.crudapi.exception.GlobalExceptionHandler;
+import com.example.crudapi.exception.InvalidRequestException;
 import com.example.crudapi.exception.ResourceNotFoundException;
 import com.example.crudapi.service.ProductService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,6 +30,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -139,6 +141,46 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.totalElements").value(0));
 
         verify(productService).search(eq("chuot"), eq(2L), any());
+    }
+
+    @Test
+    @DisplayName("patch: tra ve 200 voi resource da cap nhat")
+    void patch_shouldReturn200() throws Exception {
+        when(productService.patch(eq(1L), any())).thenReturn(new ProductResponse(
+                1L, "SKU-001", "Ban phim co", "mo ta",
+                new BigDecimal("1250000.00"), 20, new CategorySummary(2L, "Phu kien may tinh"),
+                Instant.now(), Instant.now()));
+
+        mockMvc.perform(patch("/api/v1/products/{id}", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\": 20}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quantity").value(20));
+    }
+
+    @Test
+    @DisplayName("patch: product khong ton tai -> 404")
+    void patch_shouldReturn404_whenMissing() throws Exception {
+        when(productService.patch(eq(99L), any()))
+                .thenThrow(new ResourceNotFoundException("Khong tim thay product voi id = 99"));
+
+        mockMvc.perform(patch("/api/v1/products/{id}", 99L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\": 20}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("patch: gia tri khong hop le -> 400")
+    void patch_shouldReturn400_whenValueInvalid() throws Exception {
+        when(productService.patch(eq(1L), any()))
+                .thenThrow(new InvalidRequestException("quantity phai >= 0"));
+
+        mockMvc.perform(patch("/api/v1/products/{id}", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\": -1}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid request"));
     }
 
     @Test

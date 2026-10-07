@@ -6,9 +6,12 @@ import com.example.crudapi.dto.ProductResponse;
 import com.example.crudapi.entity.Category;
 import com.example.crudapi.entity.Product;
 import com.example.crudapi.exception.DuplicateResourceException;
+import com.example.crudapi.exception.InvalidRequestException;
 import com.example.crudapi.exception.ResourceNotFoundException;
 import com.example.crudapi.repository.CategoryRepository;
 import com.example.crudapi.repository.ProductRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -174,6 +177,140 @@ class ProductServiceTest {
 
         assertThat(response.category()).isNull();
         assertThat(existing.getCategory()).isNull();
+    }
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static JsonNode patch(String json) {
+        try {
+            return MAPPER.readTree(json);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static Product existingProduct() {
+        Product product = new Product();
+        product.setId(1L);
+        product.setSku("SKU-001");
+        product.setName("Ban phim co");
+        product.setDescription("mo ta cu");
+        product.setPrice(new BigDecimal("100.00"));
+        product.setQuantity(5);
+        product.setCategory(category(2L, "Phu kien may tinh"));
+        return product;
+    }
+
+    @Test
+    @DisplayName("patch: chi cap nhat field co mat trong body, field vang mat giu nguyen")
+    void patch_shouldUpdateOnlyProvidedFields() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        ProductResponse response = productService.patch(1L, patch("{\"quantity\": 20}"));
+
+        assertThat(response.quantity()).isEqualTo(20);
+        assertThat(response.sku()).isEqualTo("SKU-001");
+        assertThat(response.name()).isEqualTo("Ban phim co");
+        assertThat(response.description()).isEqualTo("mo ta cu");
+        assertThat(response.category().id()).isEqualTo(2L);
+        verify(productRepository, never()).existsBySkuAndIdNot(any(), any());
+    }
+
+    @Test
+    @DisplayName("patch: gui description = null -> xoa mo ta")
+    void patch_shouldClearDescription_whenExplicitNull() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        ProductResponse response = productService.patch(1L, patch("{\"description\": null}"));
+
+        assertThat(response.description()).isNull();
+    }
+
+    @Test
+    @DisplayName("patch: gui categoryId = null -> go category dang gan")
+    void patch_shouldDetachCategory_whenCategoryIdExplicitNull() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        ProductResponse response = productService.patch(1L, patch("{\"categoryId\": null}"));
+
+        assertThat(response.category()).isNull();
+        verify(categoryRepository, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("patch: doi categoryId -> gan category moi")
+    void patch_shouldAttachNewCategory_whenCategoryIdProvided() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(categoryRepository.findById(3L)).thenReturn(Optional.of(category(3L, "Linh kien")));
+
+        ProductResponse response = productService.patch(1L, patch("{\"categoryId\": 3}"));
+
+        assertThat(response.category().id()).isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("patch: categoryId moi khong ton tai -> ResourceNotFoundException")
+    void patch_shouldThrow_whenCategoryNotFound() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.patch(1L, patch("{\"categoryId\": 99}")))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("patch: sku moi da ton tai o product khac -> DuplicateResourceException")
+    void patch_shouldThrow_whenSkuDuplicated() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(productRepository.existsBySkuAndIdNot("SKU-999", 1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> productService.patch(1L, patch("{\"sku\": \"SKU-999\"}")))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    @DisplayName("patch: sku = chuoi rong -> InvalidRequestException")
+    void patch_shouldThrow_whenSkuBlank() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> productService.patch(1L, patch("{\"sku\": \"  \"}")))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    @DisplayName("patch: price am -> InvalidRequestException")
+    void patch_shouldThrow_whenPriceNegative() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> productService.patch(1L, patch("{\"price\": -1}")))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    @DisplayName("patch: quantity am -> InvalidRequestException")
+    void patch_shouldThrow_whenQuantityNegative() {
+        Product existing = existingProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> productService.patch(1L, patch("{\"quantity\": -1}")))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    @DisplayName("patch: khong tim thay product -> ResourceNotFoundException")
+    void patch_shouldThrow_whenProductNotFound() {
+        when(productRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.patch(99L, patch("{\"quantity\": 1}")))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     /**

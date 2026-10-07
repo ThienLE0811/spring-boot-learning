@@ -6,16 +6,20 @@ import com.example.crudapi.dto.ProductResponse;
 import com.example.crudapi.entity.Category;
 import com.example.crudapi.entity.Product;
 import com.example.crudapi.exception.DuplicateResourceException;
+import com.example.crudapi.exception.InvalidRequestException;
 import com.example.crudapi.exception.ResourceNotFoundException;
 import com.example.crudapi.repository.CategoryRepository;
 import com.example.crudapi.repository.ProductRepository;
 import com.example.crudapi.repository.ProductSpecifications;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+import java.math.BigDecimal;
 
 /**
  * Chua toan bo business logic. Controller chi lam nhiem vu dieu huong HTTP,
@@ -83,6 +87,90 @@ public class ProductService {
         // Khong can goi save(): product dang o trang thai managed trong persistence
         // context, Hibernate se tu flush khi transaction commit.
         return ProductResponse.from(product);
+    }
+
+    /**
+     * PATCH: chi cap nhat field co mat trong body, khac voi update() (PUT) luon ghi de ca resource.
+     *
+     * Dung JsonNode thay vi mot record nhu ProductRequest vi PATCH can phan biet 3 trang thai
+     * cho moi field - "khong gui" (giu nguyen), "gui null" (xoa, ap dung cho description/categoryId),
+     * "gui gia tri" (cap nhat) - trong khi mot field kieu String/Long binh thuong khong gui va
+     * gui null deu bi Jackson gop thanh cung mot gia tri null, khong the phan biet duoc.
+     */
+    @Transactional
+    public ProductResponse patch(Long id, JsonNode patch) {
+        Product product = findOrThrow(id);
+
+        if (patch.has("sku")) {
+            String sku = requireNonBlankText(patch, "sku");
+            if (productRepository.existsBySkuAndIdNot(sku, id)) {
+                throw new DuplicateResourceException("SKU da ton tai: " + sku);
+            }
+            product.setSku(sku);
+        }
+
+        if (patch.has("name")) {
+            product.setName(requireNonBlankText(patch, "name"));
+        }
+
+        if (patch.has("description")) {
+            JsonNode node = patch.get("description");
+            product.setDescription(node.isNull() || !StringUtils.hasText(node.asText())
+                    ? null : node.asText().trim());
+        }
+
+        if (patch.has("price")) {
+            product.setPrice(requirePrice(patch.get("price")));
+        }
+
+        if (patch.has("quantity")) {
+            product.setQuantity(requireQuantity(patch.get("quantity")));
+        }
+
+        if (patch.has("categoryId")) {
+            JsonNode node = patch.get("categoryId");
+            product.setCategory(node.isNull() ? null : resolveCategory(requirePositiveLong(node, "categoryId")));
+        }
+
+        // Khong can goi save(): product dang o trang thai managed, Hibernate tu flush luc commit.
+        return ProductResponse.from(product);
+    }
+
+    private String requireNonBlankText(JsonNode patch, String field) {
+        JsonNode node = patch.get(field);
+        if (node.isNull() || !StringUtils.hasText(node.asText())) {
+            throw new InvalidRequestException(field + " khong duoc de trong");
+        }
+        return node.asText().trim();
+    }
+
+    private BigDecimal requirePrice(JsonNode node) {
+        if (node.isNull() || !node.isNumber()) {
+            throw new InvalidRequestException("price khong duoc null va phai la so");
+        }
+        BigDecimal price = node.decimalValue();
+        if (price.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidRequestException("price phai >= 0");
+        }
+        return price;
+    }
+
+    private Integer requireQuantity(JsonNode node) {
+        if (node.isNull() || !node.isIntegralNumber()) {
+            throw new InvalidRequestException("quantity khong duoc null va phai la so nguyen");
+        }
+        int quantity = node.asInt();
+        if (quantity < 0) {
+            throw new InvalidRequestException("quantity phai >= 0");
+        }
+        return quantity;
+    }
+
+    private Long requirePositiveLong(JsonNode node, String field) {
+        if (!node.isIntegralNumber() || node.asLong() <= 0) {
+            throw new InvalidRequestException(field + " phai la so nguyen duong");
+        }
+        return node.asLong();
     }
 
     @Transactional

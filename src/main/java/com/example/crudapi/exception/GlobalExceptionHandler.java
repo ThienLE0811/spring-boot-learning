@@ -40,6 +40,12 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Resource in use", ex.getMessage());
     }
 
+    /** PATCH nhan JsonNode nen khong di qua @Valid duoc; service tu kiem tra va nem loi nay. */
+    @ExceptionHandler(InvalidRequestException.class)
+    public ProblemDetail handleInvalidRequest(InvalidRequestException ex) {
+        return problem(HttpStatus.BAD_REQUEST, "Invalid request", ex.getMessage());
+    }
+
     /** Loi @Valid tren @RequestBody -> 400 kem chi tiet tung field. */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {

@@ -4,6 +4,7 @@ import com.example.crudapi.dto.PageResponse;
 import com.example.crudapi.dto.ProductRequest;
 import com.example.crudapi.dto.ProductResponse;
 import com.example.crudapi.service.ProductService;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -62,6 +64,12 @@ public class ProductController {
     @PutMapping("/{id}")
     public ProductResponse update(@PathVariable Long id, @Valid @RequestBody ProductRequest request) {
         return productService.update(id, request);
+    }
+
+    /** Chi cap nhat field co mat trong body; field vang mat giu nguyen gia tri hien tai. */
+    @PatchMapping("/{id}")
+    public ProductResponse patch(@PathVariable Long id, @RequestBody JsonNode patch) {
+        return productService.patch(id, patch);
     }
 
     @DeleteMapping("/{id}")

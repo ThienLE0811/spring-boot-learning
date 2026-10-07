@@ -100,6 +100,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>
 | GET | `/api/v1/products/{id}` | Chi tiết | 200 |
 | POST | `/api/v1/products` | Tạo mới | 201 + header `Location` |
 | PUT | `/api/v1/products/{id}` | Cập nhật toàn bộ | 200 |
+| PATCH | `/api/v1/products/{id}` | Cập nhật một phần | 200 |
 | DELETE | `/api/v1/products/{id}` | Xoá | 204 |
 | GET | `/api/v1/categories` | Danh sách, phân trang | 200 |
 | GET | `/api/v1/categories/{id}` | Chi tiết | 200 |
@@ -120,6 +121,28 @@ Hai bộ lọc độc lập nhau, dùng riêng hay kết hợp đều được; 
 `products.category_id` **nullable**: product có thể chưa được phân loại, nên `categoryId`
 trong payload là tuỳ chọn. Với `PUT`, bỏ `categoryId` đi đồng nghĩa **gỡ** category đang gắn
 (PUT thay thế toàn bộ resource).
+
+### PUT vs PATCH
+
+`PUT` thay thế toàn bộ resource: field nào không gửi coi như không có (ví dụ bỏ
+`categoryId` nghĩa là gỡ category). `PATCH` chỉ cập nhật field có mặt trong body,
+field vắng mặt giữ nguyên giá trị hiện tại — vì vậy cần phân biệt 3 trạng thái cho
+mỗi field (không gửi / gửi `null` / gửi giá trị), điều mà một DTO kiểu record bình
+thường (như `ProductRequest`) không làm được vì "không gửi" và "gửi `null`" đều bị
+Jackson gộp thành cùng một giá trị `null`. `PATCH` vì vậy nhận thẳng `JsonNode` và
+service tự kiểm tra từng field có mặt hay không (`JsonNode.has(...)`) rồi mới validate:
+
+```bash
+# Chỉ sửa quantity, các field khác giữ nguyên
+curl -X PATCH http://localhost:8080/api/v1/products/1 \
+  -H "Content-Type: application/json" \
+  -d '{"quantity": 20}'
+
+# Gỡ category đang gắn (gửi categoryId = null), các field khác giữ nguyên
+curl -X PATCH http://localhost:8080/api/v1/products/1 \
+  -H "Content-Type: application/json" \
+  -d '{"categoryId": null}'
+```
 
 `ProductResponse` nhúng category ở dạng rút gọn, và do `default-property-inclusion: non_null`
 nên field này biến mất khỏi JSON khi product chưa có category:
@@ -223,11 +246,19 @@ Theo chuẩn RFC 7807 (`ProblemDetail`):
   `categories` bên cạnh `LEFT JOIN FETCH` của `@EntityGraph`.
 - **`MethodArgumentTypeMismatchException` phải có handler riêng**: không có nó thì
   `?categoryId=abc` rơi xuống `handleUnexpected` và trả 500 cho một lỗi đầu vào.
+- **`PATCH` nhận `JsonNode` thay vì DTO kiểu record**: PATCH cần phân biệt "không gửi field"
+  (giữ nguyên) với "gửi field = null" (xoá, áp dụng cho `description`/`categoryId`) — hai
+  trạng thái mà một field `String`/`Long` bình thường trên record không phân biệt được vì
+  Jackson gộp cả hai thành `null`. Đổi lại, `ProductService.patch()` phải tự validate thủ
+  công từng field thay vì dựa vào Bean Validation, nên ném `InvalidRequestException` riêng
+  (handler mới trong `GlobalExceptionHandler`) chứ không phải `MethodArgumentNotValidException`.
 
 ## Gợi ý bài tập tiếp theo
 
-1. Thêm `PATCH` để cập nhật một phần.
-2. Thêm Spring Security + JWT (ví dụ chỉ `ADMIN` được tạo/xoá category).
-3. Thêm Spring Boot Actuator để xem health/metrics.
-4. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
+1. ~~Viết integration test với Testcontainers (Postgres thật trong Docker)~~ ✅
+   Xem `src/test/java/com/example/crudapi/repository/ProductRepositoryIntegrationTest.java`.
+2. ~~Thêm `PATCH` để cập nhật một phần.~~ ✅ Xem mục [PUT vs PATCH](#put-vs-patch) ở trên.
+3. Thêm Spring Security + JWT (ví dụ chỉ `ADMIN` được tạo/xoá category).
+4. Thêm Spring Boot Actuator để xem health/metrics.
+5. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
    `ProductSpecifications` rồi `.and(...)`, không phải đụng vào repository.
