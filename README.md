@@ -255,10 +255,7 @@ Theo chuẩn RFC 7807 (`ProblemDetail`):
 
 ## Gợi ý bài tập tiếp theo
 
-1. ~~Viết integration test với Testcontainers (Postgres thật trong Docker)~~ ✅
-   Xem `src/test/java/com/example/crudapi/repository/ProductRepositoryIntegrationTest.java`.
-2. ~~Thêm `PATCH` để cập nhật một phần.~~ ✅ Xem mục [PUT vs PATCH](#put-vs-patch) ở trên.
-3. Thêm Spring Security + JWT (ví dụ chỉ `ADMIN` được tạo/xoá category).
-4. Thêm Spring Boot Actuator để xem health/metrics.
-5. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
+1. Thêm Spring Security + JWT (ví dụ chỉ `ADMIN` được tạo/xoá category).
+2. Thêm Spring Boot Actuator để xem health/metrics.
+3. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
    `ProductSpecifications` rồi `.and(...)`, không phải đụng vào repository.
