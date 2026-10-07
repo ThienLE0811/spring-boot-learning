@@ -1,6 +1,6 @@
 # CRUD API — Spring Boot + PostgreSQL
 
-Dự án cá nhân để học Spring Boot. REST API quản lý `Product` với đầy đủ CRUD,
+Dự án cá nhân để học Spring Boot. REST API quản lý `Product` và `Category` với đầy đủ CRUD,
 phân trang, tìm kiếm, validation và xử lý lỗi tập trung.
 
 ## Tech stack
@@ -20,21 +20,27 @@ phân trang, tìm kiếm, validation và xử lý lỗi tập trung.
 src/main/java/com/example/crudapi/
 ├── CrudApiApplication.java      # entry point
 ├── config/                      # JpaAuditingConfig, OpenApiConfig
-├── entity/Product.java          # JPA entity ánh xạ bảng products
+├── entity/                      # Product, Category — JPA entity
 ├── repository/                  # Spring Data JPA repository
-├── service/ProductService.java  # business logic + transaction boundary
-├── dto/                         # ProductRequest/Response, PageResponse (Java record)
-├── web/ProductController.java   # REST endpoints
+├── service/                     # business logic + transaction boundary
+├── dto/                         # Request/Response, PageResponse (Java record)
+├── web/                         # REST endpoints
 └── exception/                   # custom exception + @RestControllerAdvice
 
 src/main/resources/
 ├── application.yml
-└── db/migration/                # Flyway: V1 tạo bảng, V2 seed dữ liệu mẫu
+└── db/migration/                # Flyway: V1 products, V2 seed, V3 categories + FK, V4 seed
 ```
 
 Luồng xử lý: **Controller → Service → Repository → PostgreSQL**.
 Controller chỉ lo HTTP, Service giữ business logic và ranh giới transaction,
 Repository chỉ truy vấn DB.
+
+Chi tiết từng bước của một request (kèm SQL Hibernate sinh ra, ranh giới transaction, sơ đồ tuần tự):
+[docs/request-flow.md](docs/request-flow.md).
+
+Giải thích từng thư mục, và phân biệt đâu là quy ước bắt buộc của Maven/Spring/Flyway, đâu là tự đặt:
+[docs/project-structure.md](docs/project-structure.md).
 
 ## Chạy dự án
 
@@ -95,15 +101,51 @@ Swagger UI: <http://localhost:8080/swagger-ui.html>
 | POST | `/api/v1/products` | Tạo mới | 201 + header `Location` |
 | PUT | `/api/v1/products/{id}` | Cập nhật toàn bộ | 200 |
 | DELETE | `/api/v1/products/{id}` | Xoá | 204 |
+| GET | `/api/v1/categories` | Danh sách, phân trang | 200 |
+| GET | `/api/v1/categories/{id}` | Chi tiết | 200 |
+| POST | `/api/v1/categories` | Tạo mới | 201 + header `Location` |
+| PUT | `/api/v1/categories/{id}` | Cập nhật toàn bộ | 200 |
+| DELETE | `/api/v1/categories/{id}` | Xoá (409 nếu còn product dùng) | 204 |
 
 Query param của `GET /api/v1/products`:
-`keyword` (tìm theo name hoặc sku), `page`, `size`, `sort` (ví dụ `sort=name,asc`).
+`keyword` (tìm theo name hoặc sku), `categoryId` (lọc theo category),
+`page`, `size`, `sort` (ví dụ `sort=name,asc`).
+Hai bộ lọc độc lập nhau, dùng riêng hay kết hợp đều được; thiếu bộ lọc nào thì bỏ qua bộ đó.
+`categoryId` không tồn tại trả về trang rỗng (đây là bộ lọc, không phải truy xuất resource).
+
+`GET /api/v1/categories` dùng `keyword` để tìm theo name.
+
+### Quan hệ Product → Category
+
+`products.category_id` **nullable**: product có thể chưa được phân loại, nên `categoryId`
+trong payload là tuỳ chọn. Với `PUT`, bỏ `categoryId` đi đồng nghĩa **gỡ** category đang gắn
+(PUT thay thế toàn bộ resource).
+
+`ProductResponse` nhúng category ở dạng rút gọn, và do `default-property-inclusion: non_null`
+nên field này biến mất khỏi JSON khi product chưa có category:
+
+```json
+{
+  "id": 1,
+  "sku": "SKU-001",
+  "name": "Ban phim co",
+  "price": 1250000.00,
+  "quantity": 15,
+  "category": { "id": 1, "name": "Phu kien may tinh" }
+}
+```
 
 ### Ví dụ
 
 ```bash
 # Danh sách
 curl "http://localhost:8080/api/v1/products?keyword=chuot&page=0&size=10&sort=name,asc"
+
+# Lọc theo category
+curl "http://localhost:8080/api/v1/products?categoryId=1"
+
+# Kết hợp cả hai bộ lọc
+curl "http://localhost:8080/api/v1/products?keyword=ban&categoryId=1"
 
 # Tạo mới
 curl -X POST http://localhost:8080/api/v1/products \
@@ -137,8 +179,10 @@ Theo chuẩn RFC 7807 (`ProblemDetail`):
 | Tình huống | HTTP status |
 |---|---|
 | Payload không hợp lệ | 400 |
-| Không tìm thấy id | 404 |
-| SKU trùng / vi phạm ràng buộc DB | 409 |
+| Query param sai kiểu (`?categoryId=abc`) | 400 |
+| Không tìm thấy id (kể cả `categoryId` không tồn tại) | 404 |
+| SKU / tên category trùng, vi phạm ràng buộc DB | 409 |
+| Xoá category còn product tham chiếu | 409 (`Resource in use`) |
 | Lỗi không lường trước | 500 |
 
 ## Những điểm đáng chú ý khi học
@@ -155,11 +199,38 @@ Theo chuẩn RFC 7807 (`ProblemDetail`):
   tránh lazy loading ngoài ý muốn ở tầng view.
 - **`@EnableJpaAuditing` đặt ở class config riêng** chứ không ở class `@SpringBootApplication`,
   nếu không `@WebMvcTest` sẽ fail vì thiếu JPA metamodel.
+- **`@ManyToOne(fetch = LAZY)` + `@EntityGraph` chống N+1**: để LAZY thì query trả về N product
+  sẽ sinh thêm N câu `SELECT category` lúc map sang DTO. `@EntityGraph(attributePaths = "category")`
+  trên `findAll`/`findById`/derived query gộp lại thành một `LEFT JOIN FETCH`.
+  Bật profile `dev` rồi gọi `GET /api/v1/products` để tự quan sát số câu SQL.
+- **Quan hệ khai báo một chiều** (`Product.category`, không có `Category.products`):
+  tránh phải đồng bộ hai đầu quan hệ, và danh sách product của một category nên lấy
+  bằng query có phân trang chứ không nạp cả `List` vào bộ nhớ.
+- **Index cho cột FK**: PostgreSQL *không* tự tạo index cho `category_id`.
+  Thiếu nó thì mỗi lần xoá/sửa `categories` phải seq scan cả bảng `products`.
+- **Chặn xoá ở tầng service thay vì chờ FK nổ**: FK đã chặn sẵn, nhưng để nó ném
+  `DataIntegrityViolationException` thì client chỉ nhận được thông báo chung chung.
+  `ResourceInUseException` cho phép trả 409 kèm đúng lý do.
+- **`findById` thay vì `getReferenceById`** khi resolve `categoryId`: `getReferenceById`
+  chỉ trả proxy, id sai sẽ lộ thành lỗi FK lúc flush (500 khó hiểu) thay vì 404 rõ ràng.
+- **`Specification` cho bộ lọc tuỳ chọn**: mỗi bộ lọc tuỳ chọn làm số tổ hợp nhân đôi
+  (`keyword` × `categoryId` = 4 trường hợp). Derived query sẽ cần 4 method và 4 nhánh `if`;
+  thêm một bộ lọc nữa thành 8. `ProductSpecifications` ghép điều kiện động nên số method
+  tăng tuyến tính. Bộ lọc vắng mặt trả về `Specification.unrestricted()` thay vì `null`,
+  để phía gọi khỏi phải kiểm tra null trước khi `.and()`.
+- **Lọc category so sánh thẳng với khoá ngoại** (`root.get("category").get("id")`):
+  Hibernate dùng luôn cột `products.category_id`, không phát sinh join thừa với bảng
+  `categories` bên cạnh `LEFT JOIN FETCH` của `@EntityGraph`.
+- **`MethodArgumentTypeMismatchException` phải có handler riêng**: không có nó thì
+  `?categoryId=abc` rơi xuống `handleUnexpected` và trả 500 cho một lỗi đầu vào.
 
 ## Gợi ý bài tập tiếp theo
 
-1. Thêm entity `Category` và quan hệ `@ManyToOne` từ `Product`.
-2. Viết integration test với Testcontainers (Postgres thật trong Docker).
-3. Thêm `PATCH` để cập nhật một phần.
-4. Thêm Spring Security + JWT.
-5. Thêm Spring Boot Actuator để xem health/metrics.
+1. Viết integration test với Testcontainers (Postgres thật trong Docker)
+   — đây cũng là cách kiểm chứng `@EntityGraph` cắt được N+1 và `Specification`
+   sinh đúng SQL, thay vì phải chạy tay với profile `dev`.
+2. Thêm `PATCH` để cập nhật một phần.
+3. Thêm Spring Security + JWT (ví dụ chỉ `ADMIN` được tạo/xoá category).
+4. Thêm Spring Boot Actuator để xem health/metrics.
+5. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
+   `ProductSpecifications` rồi `.and(...)`, không phải đụng vào repository.
