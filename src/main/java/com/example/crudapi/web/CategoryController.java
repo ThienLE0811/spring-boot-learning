@@ -1,9 +1,9 @@
 package com.example.crudapi.web;
 
+import com.example.crudapi.dto.CategoryRequest;
+import com.example.crudapi.dto.CategoryResponse;
 import com.example.crudapi.dto.PageResponse;
-import com.example.crudapi.dto.ProductRequest;
-import com.example.crudapi.dto.ProductResponse;
-import com.example.crudapi.service.ProductService;
+import com.example.crudapi.service.CategoryService;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -26,32 +26,31 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import java.net.URI;
 
 @RestController
-@RequestMapping("/api/v1/products")
-public class ProductController {
+@RequestMapping("/api/v1/categories")
+public class CategoryController {
 
-    private final ProductService productService;
+    private final CategoryService categoryService;
 
-    public ProductController(ProductService productService) {
-        this.productService = productService;
+    public CategoryController(CategoryService categoryService) {
+        this.categoryService = categoryService;
     }
 
-    /** GET /api/v1/products?keyword=abc&categoryId=1&page=0&size=20&sort=name,asc */
+    /** GET /api/v1/categories?keyword=abc&page=0&size=20&sort=name,asc */
     @GetMapping
-    public PageResponse<ProductResponse> list(
+    public PageResponse<CategoryResponse> list(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long categoryId,
-            @ParameterObject @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
-        return productService.search(keyword, categoryId, pageable);
+            @ParameterObject @PageableDefault(size = 20, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
+        return categoryService.search(keyword, pageable);
     }
 
     @GetMapping("/{id}")
-    public ProductResponse getById(@PathVariable Long id) {
-        return productService.getById(id);
+    public CategoryResponse getById(@PathVariable Long id) {
+        return categoryService.getById(id);
     }
 
     @PostMapping
-    public ResponseEntity<ProductResponse> create(@Valid @RequestBody ProductRequest request) {
-        ProductResponse created = productService.create(request);
+    public ResponseEntity<CategoryResponse> create(@Valid @RequestBody CategoryRequest request) {
+        CategoryResponse created = categoryService.create(request);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
                 .buildAndExpand(created.id())
@@ -60,13 +59,13 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
-    public ProductResponse update(@PathVariable Long id, @Valid @RequestBody ProductRequest request) {
-        return productService.update(id, request);
+    public CategoryResponse update(@PathVariable Long id, @Valid @RequestBody CategoryRequest request) {
+        return categoryService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
-        productService.delete(id);
+        categoryService.delete(id);
     }
 }

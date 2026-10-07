@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -35,6 +36,13 @@ public record ProductRequest(
 
         @NotNull(message = "quantity khong duoc null")
         @Min(value = 0, message = "quantity phai >= 0")
-        Integer quantity
+        Integer quantity,
+
+        /**
+         * Tuy chon: null nghia la product chua duoc phan loai.
+         * Voi PUT, gui null dong nghia go category dang gan (PUT thay the toan bo resource).
+         */
+        @Positive(message = "categoryId phai la so duong")
+        Long categoryId
 ) {
 }

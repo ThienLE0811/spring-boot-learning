@@ -3,9 +3,13 @@ package com.example.crudapi.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
@@ -48,6 +52,17 @@ public class Product {
 
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
+
+    /**
+     * LAZY de truy van product khong keo theo category khi khong can.
+     * Doi lai phai chu y N+1: cac query tra ve danh sach product co map sang DTO
+     * co chua category deu khai bao @EntityGraph trong ProductRepository.
+     *
+     * Nullable: product co the chua duoc phan loai.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id", foreignKey = @ForeignKey(name = "fk_products_category"))
+    private Category category;
 
     /** Optimistic locking: chong lost update khi 2 request cung sua 1 ban ghi. */
     @Version

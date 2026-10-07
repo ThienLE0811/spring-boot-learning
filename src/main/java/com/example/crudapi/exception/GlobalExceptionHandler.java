@@ -10,6 +10,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -34,6 +35,11 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Duplicate resource", ex.getMessage());
     }
 
+    @ExceptionHandler(ResourceInUseException.class)
+    public ProblemDetail handleResourceInUse(ResourceInUseException ex) {
+        return problem(HttpStatus.CONFLICT, "Resource in use", ex.getMessage());
+    }
+
     /** Loi @Valid tren @RequestBody -> 400 kem chi tiet tung field. */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
@@ -44,6 +50,16 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Validation failed", "Du lieu gui len khong hop le");
         problem.setProperty("errors", fieldErrors);
         return problem;
+    }
+
+    /**
+     * Query param sai kieu du lieu (vi du ?categoryId=abc) -> loi dau vao, khong phai loi server.
+     * Khong co handler nay thi no roi xuong handleUnexpected va tra ve 500.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return problem(HttpStatus.BAD_REQUEST, "Invalid parameter type",
+                "Tham so '" + ex.getName() + "' khong dung dinh dang");
     }
 
     /**

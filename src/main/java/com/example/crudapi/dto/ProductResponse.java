@@ -12,10 +12,15 @@ public record ProductResponse(
         String description,
         BigDecimal price,
         Integer quantity,
+        CategorySummary category,
         Instant createdAt,
         Instant updatedAt
 ) {
 
+    /**
+     * Phai goi trong pham vi transaction (hoac sau khi da fetch category), vi
+     * Product.category la LAZY va open-in-view dang tat.
+     */
     public static ProductResponse from(Product product) {
         return new ProductResponse(
                 product.getId(),
@@ -24,6 +29,7 @@ public record ProductResponse(
                 product.getDescription(),
                 product.getPrice(),
                 product.getQuantity(),
+                CategorySummary.from(product.getCategory()),
                 product.getCreatedAt(),
                 product.getUpdatedAt()
         );
