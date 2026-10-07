@@ -226,11 +226,8 @@ Theo chuẩn RFC 7807 (`ProblemDetail`):
 
 ## Gợi ý bài tập tiếp theo
 
-1. Viết integration test với Testcontainers (Postgres thật trong Docker)
-   — đây cũng là cách kiểm chứng `@EntityGraph` cắt được N+1 và `Specification`
-   sinh đúng SQL, thay vì phải chạy tay với profile `dev`.
-2. Thêm `PATCH` để cập nhật một phần.
-3. Thêm Spring Security + JWT (ví dụ chỉ `ADMIN` được tạo/xoá category).
-4. Thêm Spring Boot Actuator để xem health/metrics.
-5. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
+1. Thêm `PATCH` để cập nhật một phần.
+2. Thêm Spring Security + JWT (ví dụ chỉ `ADMIN` được tạo/xoá category).
+3. Thêm Spring Boot Actuator để xem health/metrics.
+4. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
    `ProductSpecifications` rồi `.and(...)`, không phải đụng vào repository.
