@@ -1,7 +1,7 @@
 # CRUD API — Spring Boot + PostgreSQL
 
-Dự án cá nhân để học Spring Boot. REST API quản lý `Product` và `Category` với đầy đủ CRUD,
-phân trang, tìm kiếm, validation và xử lý lỗi tập trung.
+Dự án cá nhân để học Spring Boot. REST API quản lý `Product`, `Category` và `User` với đầy đủ
+CRUD, phân trang, tìm kiếm, validation, xử lý lỗi tập trung và xác thực JWT.
 
 ## Tech stack
 
@@ -19,17 +19,19 @@ phân trang, tìm kiếm, validation và xử lý lỗi tập trung.
 ```
 src/main/java/com/example/crudapi/
 ├── CrudApiApplication.java      # entry point
-├── config/                      # JpaAuditingConfig, OpenApiConfig
-├── entity/                      # Product, Category — JPA entity
+├── config/                      # JpaAuditingConfig, OpenApiConfig, SecurityConfig
+├── entity/                      # Product, Category, User, Role — JPA entity
 ├── repository/                  # Spring Data JPA repository
 ├── service/                     # business logic + transaction boundary
 ├── dto/                         # Request/Response, PageResponse (Java record)
+├── security/                    # JwtService, JwtAuthenticationFilter, CustomUserDetailsService
 ├── web/                         # REST endpoints
 └── exception/                   # custom exception + @RestControllerAdvice
 
 src/main/resources/
 ├── application.yml
-└── db/migration/                # Flyway: V1 products, V2 seed, V3 categories + FK, V4 seed
+└── db/migration/                # Flyway: V1-V2 products, V3-V4 categories + FK,
+                                 #         V5-V6 users + seed admin, V7 audit columns
 ```
 
 Luồng xử lý: **Controller → Service → Repository → PostgreSQL**.
@@ -94,19 +96,28 @@ Test hiện tại không cần database (service dùng Mockito, controller dùng
 
 Swagger UI: <http://localhost:8080/swagger-ui.html>
 
-| Method | Endpoint | Mô tả | Status thành công |
-|---|---|---|---|
-| GET | `/api/v1/products` | Danh sách, phân trang | 200 |
-| GET | `/api/v1/products/{id}` | Chi tiết | 200 |
-| POST | `/api/v1/products` | Tạo mới | 201 + header `Location` |
-| PUT | `/api/v1/products/{id}` | Cập nhật toàn bộ | 200 |
-| PATCH | `/api/v1/products/{id}` | Cập nhật một phần | 200 |
-| DELETE | `/api/v1/products/{id}` | Xoá | 204 |
-| GET | `/api/v1/categories` | Danh sách, phân trang | 200 |
-| GET | `/api/v1/categories/{id}` | Chi tiết | 200 |
-| POST | `/api/v1/categories` | Tạo mới | 201 + header `Location` |
-| PUT | `/api/v1/categories/{id}` | Cập nhật toàn bộ | 200 |
-| DELETE | `/api/v1/categories/{id}` | Xoá (409 nếu còn product dùng) | 204 |
+| Method | Endpoint | Mô tả | Quyền | Status thành công |
+|---|---|---|---|---|
+| POST | `/api/v1/auth/login` | Đăng nhập, trả JWT | công khai | 200 |
+| GET | `/api/v1/products` | Danh sách, phân trang | công khai | 200 |
+| GET | `/api/v1/products/{id}` | Chi tiết | công khai | 200 |
+| POST | `/api/v1/products` | Tạo mới | công khai | 201 + header `Location` |
+| PUT | `/api/v1/products/{id}` | Cập nhật toàn bộ | công khai | 200 |
+| PATCH | `/api/v1/products/{id}` | Cập nhật một phần | công khai | 200 |
+| DELETE | `/api/v1/products/{id}` | Xoá | công khai | 204 |
+| GET | `/api/v1/categories` | Danh sách, phân trang | công khai | 200 |
+| GET | `/api/v1/categories/{id}` | Chi tiết | công khai | 200 |
+| POST | `/api/v1/categories` | Tạo mới | ADMIN | 201 + header `Location` |
+| PUT | `/api/v1/categories/{id}` | Cập nhật toàn bộ | công khai | 200 |
+| DELETE | `/api/v1/categories/{id}` | Xoá (409 nếu còn product dùng) | ADMIN | 204 |
+| GET | `/api/v1/users` | Danh sách, phân trang | ADMIN | 200 |
+| GET | `/api/v1/users/{id}` | Chi tiết | ADMIN | 200 |
+| POST | `/api/v1/users` | Tạo mới | ADMIN | 201 + header `Location` |
+| PUT | `/api/v1/users/{id}` | Cập nhật username + role | ADMIN | 200 |
+| DELETE | `/api/v1/users/{id}` | Xoá | ADMIN | 204 |
+| PUT | `/api/v1/users/{id}/password` | Admin đặt lại mật khẩu hộ | ADMIN | 204 |
+| GET | `/api/v1/users/me` | Thông tin tài khoản đang đăng nhập | đã đăng nhập | 200 |
+| PUT | `/api/v1/users/me/password` | Tự đổi mật khẩu | đã đăng nhập | 204 |
 
 Query param của `GET /api/v1/products`:
 `keyword` (tìm theo name hoặc sku), `categoryId` (lọc theo category),
@@ -114,7 +125,53 @@ Query param của `GET /api/v1/products`:
 Hai bộ lọc độc lập nhau, dùng riêng hay kết hợp đều được; thiếu bộ lọc nào thì bỏ qua bộ đó.
 `categoryId` không tồn tại trả về trang rỗng (đây là bộ lọc, không phải truy xuất resource).
 
-`GET /api/v1/categories` dùng `keyword` để tìm theo name.
+`GET /api/v1/categories` và `GET /api/v1/users` dùng `keyword` để tìm theo name / username.
+
+### Xác thực & phân quyền
+
+Đăng nhập lấy JWT rồi gửi kèm ở header `Authorization`:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | jq -r .accessToken)
+
+curl http://localhost:8080/api/v1/users -H "Authorization: Bearer $TOKEN"
+```
+
+Tài khoản seed sẵn: `admin` / `admin123` (role `ADMIN`).
+
+Phân quyền khai báo tập trung theo URL trong `SecurityConfig`, không rải `@PreAuthorize`
+trên từng method. **Thứ tự matcher quan trọng** — rule đầu tiên khớp sẽ được áp dụng:
+
+```java
+.requestMatchers("/api/v1/users/me", "/api/v1/users/me/**").authenticated()
+.requestMatchers("/api/v1/users/**").hasRole("ADMIN")
+```
+
+Đảo hai dòng này thì `/users/me` rơi vào nhánh `hasRole("ADMIN")` và user thường
+không xem được thông tin của chính mình.
+
+### Quản lý user
+
+`UserResponse` **không có field `password`** — không phải "nhớ đừng trả ra", mà là không
+có chỗ để trả. Mật khẩu luôn được `BCryptPasswordEncoder` hash ở tầng service trước khi
+chạm DB.
+
+Hai ràng buộc nghiệp vụ vượt ra ngoài phạm vi một bản ghi:
+
+| Tình huống | Kết quả |
+|---|---|
+| Admin tự xoá tài khoản đang đăng nhập | 400 `Invalid request` |
+| Xoá hoặc hạ quyền ADMIN cuối cùng | 409 `Resource in use` |
+
+Đổi mật khẩu tách làm **hai endpoint** thay vì gộp: `/users/me/password` bắt buộc gửi
+`currentPassword` (chống kẻ chiếm được phiên đăng nhập đổi mật khẩu), còn
+`/users/{id}/password` cho admin reset hộ thì không cần. Gộp lại thì service phải nhận
+thêm cờ `isAdmin` để biết có verify hay không — logic phân quyền rò rỉ xuống tầng service.
+
+`password` cũng bị loại khỏi danh sách field được sắp xếp, nên `?sort=password,asc`
+trả 400 thay vì âm thầm `ORDER BY password`.
 
 ### Quan hệ Product → Category
 
@@ -202,6 +259,7 @@ Theo chuẩn RFC 7807 (`ProblemDetail`):
 | Tình huống | HTTP status |
 |---|---|
 | Payload không hợp lệ | 400 |
+| Body sai cú pháp JSON hoặc sai kiểu (`"role": "SUPERADMIN"`) | 400 |
 | Query param sai kiểu (`?categoryId=abc`) | 400 |
 | Không tìm thấy id (kể cả `categoryId` không tồn tại) | 404 |
 | SKU / tên category trùng, vi phạm ràng buộc DB | 409 |
@@ -252,6 +310,30 @@ Theo chuẩn RFC 7807 (`ProblemDetail`):
   Jackson gộp cả hai thành `null`. Đổi lại, `ProductService.patch()` phải tự validate thủ
   công từng field thay vì dựa vào Bean Validation, nên ném `InvalidRequestException` riêng
   (handler mới trong `GlobalExceptionHandler`) chứ không phải `MethodArgumentNotValidException`.
+- **`DEFAULT now()` ở DB không thay được `@CreatedDate`**: Hibernate liệt kê đầy đủ mọi cột
+  trong câu `INSERT`, nên field null sẽ bind `NULL` và **đè lên** default của DB → vi phạm
+  `NOT NULL`. `DEFAULT` chỉ có tác dụng khi cột vắng mặt khỏi câu lệnh (trường hợp file seed
+  Flyway). Bảng `users` từng dính đúng lỗi này và chỉ lộ ra khi có endpoint tạo user.
+- **`ALTER TABLE ADD COLUMN ... NOT NULL` bắt buộc có `DEFAULT`** khi bảng đã có dữ liệu —
+  PostgreSQL cần biết điền gì vào các dòng cũ. Migration trên bảng đã có dữ liệu luôn khó
+  hơn `CREATE TABLE` từ đầu, điều mà `ddl-auto=update` giấu đi hoàn toàn.
+- **Derived query được kiểm tra lúc khởi động, không phải lúc compile**: `countByRoles` sai
+  tên field vẫn biên dịch bình thường, chỉ nổ `PropertyReferenceException` khi Spring Data
+  tạo bean repository. `mvn compile` xanh **không** chứng minh repository đúng — phải chạy app.
+- **BCrypt phải dùng `matches()` chứ không `equals()`**: mỗi lần `encode()` trộn một salt ngẫu
+  nhiên nên hash cùng một chuỗi hai lần ra hai kết quả khác nhau. `matches(raw, hash)` đọc salt
+  nhúng sẵn trong `hash` rồi mới so sánh.
+- **Thứ tự "sửa entity" và "chạy query" trong một transaction có ý nghĩa**: trước khi chạy query,
+  Hibernate tự flush các thay đổi đang chờ (*auto-flush before query*). Vì vậy
+  `UserService.update()` phải đếm số ADMIN **trước** khi `setRole()`, nếu không phép đếm sẽ
+  chạy trên dữ liệu đã bị hạ quyền.
+- **Service không đọc `SecurityContextHolder`**: controller lấy `Authentication` rồi truyền
+  username xuống dạng `String`. `SecurityContextHolder` dùng `ThreadLocal` — khái niệm của tầng
+  web; tách ra thì service test được bằng Mockito thuần, không phải dựng SecurityContext giả.
+- **`@WebMvcTest(addFilters = false)` làm tham số `Authentication` thành `null`**: nó gỡ
+  `SecurityContextHolderAwareRequestFilter`, filter duy nhất khiến `request.getUserPrincipal()`
+  trả về `Authentication`. `@WithMockUser` chỉ set `SecurityContextHolder` nên không đủ —
+  phải gán thẳng `.principal(...)` vào request (xem `UserControllerTest`).
 
 ## Gợi ý bài tập tiếp theo
 
