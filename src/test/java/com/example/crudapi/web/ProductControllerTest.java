@@ -8,11 +8,14 @@ import com.example.crudapi.entity.Product;
 import com.example.crudapi.exception.GlobalExceptionHandler;
 import com.example.crudapi.exception.InvalidRequestException;
 import com.example.crudapi.exception.ResourceNotFoundException;
+import com.example.crudapi.security.CustomUserDetailsService;
+import com.example.crudapi.security.JwtService;
 import com.example.crudapi.service.ProductService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.mapping.PropertyReferenceException;
@@ -37,9 +40,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Test tang web: chi nap MVC layer, service duoc mock -> khong dung toi DB.
+ * JwtService/CustomUserDetailsService duoc mock vi WebMvcTest tu dong nap
+ * JwtAuthenticationFilter (la mot Filter) va can 2 bean nay de khoi tao no.
  */
 @WebMvcTest(ProductController.class)
 @Import(GlobalExceptionHandler.class)
+@AutoConfigureMockMvc(addFilters = false)
 class ProductControllerTest {
 
     @Autowired
@@ -47,6 +53,12 @@ class ProductControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @MockitoBean
+    private JwtService jwtService;
+
+    @MockitoBean
+    private CustomUserDetailsService customUserDetailsService;
 
     @MockitoBean
     private ProductService productService;

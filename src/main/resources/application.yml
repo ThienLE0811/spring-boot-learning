@@ -40,6 +40,10 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+jwt:
+  secret: ${JWT_SECRET:mwpzvnEQii6xj7XVEI8tCEZLrbx+k7RSQXT/pGFNn9YZWUKnpnp/rkFkXLJajYxaSz3SHoUy9C3nnPsYiId5aw==}
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+
 logging:
   level:
     com.example.crudapi: DEBUG

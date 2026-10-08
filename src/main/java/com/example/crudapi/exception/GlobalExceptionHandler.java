@@ -7,6 +7,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -86,6 +87,11 @@ public class GlobalExceptionHandler {
         log.warn("Vi pham rang buoc du lieu", ex);
         return problem(HttpStatus.CONFLICT, "Data integrity violation",
                 "Du lieu vi pham rang buoc cua database");
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ProblemDetail handleAuthentication(AuthenticationException ex) {
+        return problem(HttpStatus.UNAUTHORIZED, "Authentication failed", "Sai username hoac password");
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)

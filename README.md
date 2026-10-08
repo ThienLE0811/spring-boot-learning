@@ -255,7 +255,5 @@ Theo chuẩn RFC 7807 (`ProblemDetail`):
 
 ## Gợi ý bài tập tiếp theo
 
-1. Thêm Spring Security + JWT (ví dụ chỉ `ADMIN` được tạo/xoá category).
-2. Thêm Spring Boot Actuator để xem health/metrics.
-3. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
+1. Thêm bộ lọc khoảng giá (`minPrice`/`maxPrice`) — chỉ cần thêm method vào
    `ProductSpecifications` rồi `.and(...)`, không phải đụng vào repository.

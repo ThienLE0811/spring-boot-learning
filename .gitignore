@@ -16,3 +16,4 @@ target/
 ### Logs & local env ###
 *.log
 .env
+application-local.yml

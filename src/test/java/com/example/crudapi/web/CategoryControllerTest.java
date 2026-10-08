@@ -5,11 +5,14 @@ import com.example.crudapi.dto.CategoryResponse;
 import com.example.crudapi.exception.GlobalExceptionHandler;
 import com.example.crudapi.exception.ResourceInUseException;
 import com.example.crudapi.exception.ResourceNotFoundException;
+import com.example.crudapi.security.CustomUserDetailsService;
+import com.example.crudapi.security.JwtService;
 import com.example.crudapi.service.CategoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -30,9 +33,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Test tang web cho Category: chi nap MVC layer, service duoc mock -> khong dung toi DB.
+ * Tat filter chain cua Spring Security (addFilters = false) vi test nay khong nham kiem tra
+ * security - quyen ADMIN cho POST/DELETE duoc kiem tra rieng o CategorySecurityTest.
+ * JwtService/CustomUserDetailsService van phai mock vi WebMvcTest tu dong nap
+ * JwtAuthenticationFilter (la mot Filter) va can 2 bean nay de khoi tao no.
  */
 @WebMvcTest(CategoryController.class)
 @Import(GlobalExceptionHandler.class)
+@AutoConfigureMockMvc(addFilters = false)
 class CategoryControllerTest {
 
     @Autowired
@@ -43,6 +51,12 @@ class CategoryControllerTest {
 
     @MockitoBean
     private CategoryService categoryService;
+
+    @MockitoBean
+    private JwtService jwtService;
+
+    @MockitoBean
+    private CustomUserDetailsService customUserDetailsService;
 
     @Test
     void getById_shouldReturn200() throws Exception {
