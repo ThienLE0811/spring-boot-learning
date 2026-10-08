@@ -7,6 +7,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -57,6 +58,21 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Validation failed", "Du lieu gui len khong hop le");
         problem.setProperty("errors", fieldErrors);
         return problem;
+    }
+
+    /**
+     * Body khong parse duoc: sai cu phap JSON, sai kieu du lieu ("price": "abc"),
+     * hoac gia tri khong thuoc enum ("role": "SUPERADMIN"). Jackson nem exception nay
+     * TRUOC khi @Valid chay, nen no khong the thanh MethodArgumentNotValidException.
+     * Khong co handler nay thi no roi xuong handleUnexpected va tra 500 cho mot loi dau vao.
+     *
+     * Khong dua ex.getMessage() ra ngoai vi no chua ten class/package noi bo.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleUnreadableBody(HttpMessageNotReadableException ex) {
+        log.debug("Body khong doc duoc", ex);
+        return problem(HttpStatus.BAD_REQUEST, "Malformed request body",
+                "Body khong doc duoc: sai cu phap JSON hoac sai kieu du lieu");
     }
 
     /**
